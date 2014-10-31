@@ -99,10 +99,12 @@ gradv_t SobelFilter::convolveAt(const cv::Mat &kernel, int x, int y) {
     int xMin = kxRadius, yMin = kyRadius;
     int xMax = src.rows - kxRadius, yMax = src.cols - kyRadius;
 
-    if (x <= xMax && x >= xMin && y <= yMax && y >= yMin) {
+    if (x < xMax && x >= xMin && y < yMax && y >= yMin) {
         for (int m = -kxRadius; m <= kxRadius; m++) {
             for (int n = -kyRadius; n <= kyRadius; n++) {
-                sum += (src.at<uint8_t>(x + m + kxRadius, y + n + kyRadius) 
+                int px = x + m;
+                int py = y + n;
+                sum += (src.at<uint8_t>(px,py)
                         * kernel.at<int8_t>(m+kxRadius,n+kyRadius));
             }
         }
