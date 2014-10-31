@@ -31,8 +31,8 @@ void SobelFilter::initKernels() {
 
 
 void SobelFilter::initGradients() {
-    gradientX = cv::Mat(src.size(),CV_32F);
-    gradientY = cv::Mat(src.size(),CV_32F);
+    gradientX = cv::Mat(src.size(),CV_16S);
+    gradientY = cv::Mat(src.size(),CV_16S);
 }
 
 
@@ -44,42 +44,55 @@ cv::Mat SobelFilter::getGradientY() {
     return gradientY;
 }
 
+template<class T>
+Normaliser<T>::Normaliser(cv::Mat &m, int boundL, int boundH) : 
+    m(m),
+    boundL(boundL),
+    boundH(boundH) {
+
+    min = std::numeric_limits<T>::max();
+    max = std::numeric_limits<T>::min();
+}
+
+template<class T>
+void Normaliser<T>::update(T v) {
+    if (v < min) {
+        min = v;
+    }
+    if (v > max) {
+        max = v;
+    }
+}
+
+template<class T>
+cv::Mat Normaliser<T>::normalise() {
+    return (boundH - boundL) * (m-min) / (max-min);
+}
+
 void SobelFilter::pixelLoop() {
-    float gradXmin = std::numeric_limits<float>::max() , gradXmax = std::numeric_limits<float>::min();
-    float gradYmin = std::numeric_limits<float>::max() , gradYmax = std::numeric_limits<float>::min();
+    Normaliser<gradv_t> xnorm(gradientX,0,255);
+    Normaliser<gradv_t> ynorm(gradientY,0,255);
+
     for (int i = 0; i < src.rows; i++) {
         for (int j = 0; j < src.cols; j++) {
             uint8_t p = src.at<uint8_t>(i,j);
 
-            float gradXp = convolveAt(kernelY.t(),i,j);
-            float gradYp = convolveAt(kernelY,i,j);
+            gradv_t gradXp = convolveAt(kernelX,i,j);
+            gradv_t gradYp = convolveAt(kernelY,i,j);
+    
+            xnorm.update(gradXp);
+            ynorm.update(gradYp);
 
-            if (gradXp < gradXmin) {
-                gradXmin = gradXp;
-            }
-            if (gradYp < gradYmin) {
-                gradYmin = gradYp;
-            }
-
-            if (gradXp > gradXmax) {
-                gradXmax = gradXp;
-            }
-            if (gradYp > gradYmax) {
-                gradYmax = gradYp;
-            }
-
-            gradientX.at<float>(i,j) = gradXp;
-            gradientY.at<float>(i,j) = gradYp;
+            gradientX.at<gradv_t>(i,j) = gradXp;
+            gradientY.at<gradv_t>(i,j) = gradYp;
         }
     }
-    std::cout << "X=" << gradXmin << "   -   " << gradXmax << std::endl;
-    std::cout << "Y=" << gradYmin << "   -   " << gradYmax << std::endl;
-    gradientX = 255 * (gradientX-gradXmin) / (gradXmax-gradXmin);
-    gradientY = 255 * (gradientY-gradYmin) / (gradYmax-gradYmin);
+    gradientX = xnorm.normalise();
+    gradientY = ynorm.normalise();
 }
 
-float SobelFilter::convolveAt(const cv::Mat &kernel, int x, int y) {
-    float sum = 0;
+gradv_t SobelFilter::convolveAt(const cv::Mat &kernel, int x, int y) {
+    gradv_t sum = 0;
 
     int kxRadius = (kernel.cols - 1) / 2;
     int kyRadius = (kernel.rows - 1) / 2;
@@ -93,9 +106,6 @@ float SobelFilter::convolveAt(const cv::Mat &kernel, int x, int y) {
                         * kernel.at<int8_t>(m+kxRadius,n+kyRadius));
             }
         }
-    }
-    if (abs(sum) > 255) {
-        //std::cout << "ref=x?: " << (&kernel==&kernelX) << ", SUM: " << sum << std::endl;
     }
     return sum;
 }

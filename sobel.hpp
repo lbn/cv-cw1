@@ -5,6 +5,21 @@
 #include <stdint.h>
 #include "opencv2/opencv.hpp"
 
+typedef int16_t gradv_t;
+
+template<class T>
+class Normaliser {
+    public:
+        Normaliser(cv::Mat &m, int boundL, int boundH);
+        void update(T v);
+        cv::Mat normalise();
+    private:
+        T min;
+        T max;
+        cv::Mat &m;
+        int boundL;
+        int boundH;
+};
 
 class SobelFilter {
     public:
@@ -24,7 +39,7 @@ class SobelFilter {
         cv::Mat gradientX;
         cv::Mat gradientY;
 
-        float convolveAt(const cv::Mat &kernel, int x, int y);
+        gradv_t convolveAt(const cv::Mat &kernel, int x, int y);
         void initKernels();
         void initGradients();
         void pixelLoop();
