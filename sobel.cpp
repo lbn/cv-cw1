@@ -2,11 +2,16 @@
 
 
 SobelFilter::SobelFilter(const cv::Mat &src_) 
-    : src(src_) {
+    : src(src_),
+      xnorm(gradientX,0,255),
+      ynorm(gradientY,0,255),
+      dnorm(direction,0,255),
+      mnorm(magnitude,0,255) {
     initKernels();
     initGradients();
 
-    pixelLoop();
+    genGradients();
+    genMagAndDir();
 }
 
 
@@ -33,15 +38,59 @@ void SobelFilter::initKernels() {
 void SobelFilter::initGradients() {
     gradientX = cv::Mat(src.size(),CV_16S);
     gradientY = cv::Mat(src.size(),CV_16S);
+
+    magnitude = cv::Mat(src.size(),CV_16S);
+
+    direction = cv::Mat(src.size(),CV_32F);
 }
 
 
 cv::Mat SobelFilter::getGradientX() {
-    return gradientX;
+    return getGradientX(false);
 }
 
 cv::Mat SobelFilter::getGradientY() {
-    return gradientY;
+    return getGradientY(false);
+}
+
+cv::Mat SobelFilter::getMagnitude() {
+    return getMagnitude(false);
+}
+
+cv::Mat SobelFilter::getDirection() {
+    return getDirection(false);
+}
+
+cv::Mat SobelFilter::getGradientX(bool normalised) {
+    if (normalised) {
+        return xnorm.normalise();
+    } else {
+        return gradientX;
+    }
+}
+
+cv::Mat SobelFilter::getGradientY(bool normalised) {
+    if (normalised) {
+        return ynorm.normalise();
+    } else {
+        return gradientY;
+    }
+}
+
+cv::Mat SobelFilter::getMagnitude(bool normalised) {
+    if (normalised) {
+        return mnorm.normalise();
+    } else {
+        return magnitude;
+    }
+}
+
+cv::Mat SobelFilter::getDirection(bool normalised) {
+    if (normalised) {
+        return dnorm.normalise();
+    } else {
+        return direction;
+    }
 }
 
 template<class T>
@@ -69,10 +118,7 @@ cv::Mat Normaliser<T>::normalise() {
     return (boundH - boundL) * (m-min) / (max-min);
 }
 
-void SobelFilter::pixelLoop() {
-    Normaliser<gradv_t> xnorm(gradientX,0,255);
-    Normaliser<gradv_t> ynorm(gradientY,0,255);
-
+void SobelFilter::genGradients() {
     for (int i = 0; i < src.rows; i++) {
         for (int j = 0; j < src.cols; j++) {
             uint8_t p = src.at<uint8_t>(i,j);
@@ -87,8 +133,25 @@ void SobelFilter::pixelLoop() {
             gradientY.at<gradv_t>(i,j) = gradYp;
         }
     }
-    gradientX = xnorm.normalise();
-    gradientY = ynorm.normalise();
+}
+
+
+void SobelFilter::genMagAndDir() {
+    for (int i = 0; i < src.rows; i++) {
+        for (int j = 0; j < src.cols; j++) {
+            gradv_t x = gradientX.at<gradv_t>(i,j);
+            gradv_t y = gradientY.at<gradv_t>(i,j);
+
+            gradv_t mag = sqrt(pow(x,2) + pow(y,2));
+            magnitude.at<gradv_t>(i,j) = mag;
+
+            // ???
+            float th = atan2(y,x);
+
+            mnorm.update(mag);
+            dnorm.update(th);
+        }
+    }
 }
 
 gradv_t SobelFilter::convolveAt(const cv::Mat &kernel, int x, int y) {
@@ -116,8 +179,10 @@ void test(const char *filename) {
     const cv::Mat image = cv::imread(filename, CV_LOAD_IMAGE_GRAYSCALE);
     SobelFilter sf(image);
 
-    cv::imwrite("grad_x.jpg",sf.getGradientX());
-    cv::imwrite("grad_y.jpg",sf.getGradientY());
+    cv::imwrite("grad_x.jpg",sf.getGradientX(true));
+    cv::imwrite("grad_y.jpg",sf.getGradientY(true));
+    cv::imwrite("magnitude.jpg",sf.getMagnitude(true));
+    cv::imwrite("direction.jpg",sf.getDirection(true));
 }
 
 int main(int argc, const char *argv[])
