@@ -29,12 +29,21 @@ void sobel(Mat img, Mat &dx, Mat &dy, Mat &mag, Mat &dist)
 			//write final values
 			dx.at<float>(i,j) = acc_dx;
 			dy.at<float>(i,j) = acc_dy;
-			mag.at<float>(i,j) = (sqrtf(acc_dy*acc_dy + acc_dx*acc_dx)) > 200 ? 255 : 0;
+			mag.at<float>(i,j) = (sqrtf(acc_dy*acc_dy + acc_dx*acc_dx));// > 150 ? 255 : 0;
 			dist.at<float>(i,j) = atan2f(acc_dy,acc_dx);
 			// printf("dist : %f \n", dist.at<float>(i,j) / 3.14159265f * 180 );
 		}
 	}
 }
+
+
+
+void inc_if_inside(double *** h_space, int x, int y, int height, int width, int r )
+{
+	if (x>=0 && x<width && y>= 0 && y<height)
+		h_space[y][x][r]++;
+}
+
 
 int hough_transform(Mat img_data, Mat &h_acc, Mat dist)  
 {  
@@ -49,8 +58,24 @@ int hough_transform(Mat img_data, Mat &h_acc, Mat dist)
   double center_x = img_data.cols/2;  
   double center_y = img_data.rows/2;  
   double DEG2RAD = 3.14159265f / 180;
-  int max_rad = round(((img_data.cols>img_data.rows) ? img_data.rows : img_data.cols) / 2) - 2; //maximium radius
-  int h_space[img_data.rows][img_data.cols][max_rad];
+  int max_rad = round(((img_data.cols>img_data.rows) ? img_data.rows : img_data.cols) / 6) ; //maximium radius
+
+
+  int HEIGHT = img_data.rows;
+  int WIDTH = img_data.cols;
+  int DEPTH = max_rad;
+
+  double ***h_space;
+
+  // Allocate memory
+  h_space = new double**[HEIGHT];
+  for (int i = 0; i < HEIGHT; ++i) {
+    h_space[i] = new double*[WIDTH];
+
+    for (int j = 0; j < WIDTH; ++j)
+      h_space[i][j] = new double[DEPTH];
+  }
+
 
 
   for(int y=0;y<img_data.rows;y++)  
@@ -58,27 +83,49 @@ int hough_transform(Mat img_data, Mat &h_acc, Mat dist)
        for(int x=0;x<img_data.cols;x++)  
        {  
        	// printf("data point : %f\n", img_data.at<float>(y,x));
-            if( (float) img_data.at<float>(y,x) > 200.0 )  //threshold image  
+            if( (float) img_data.at<float>(y,x) > 250.0 )  //threshold image  
             {  	
-            	double 
             	for (int r=0; r<max_rad; r++)
             	{
-            		
+
+            		int x0 = round(x + r * cos(dist.at<float>(y,x)) );
+            		int x1 = round(x - r * cos(dist.at<float>(y,x)) );
+            		int y0 = round(y + r * cos(dist.at<float>(y,x)) );
+            		int y1 = round(y - r * cos(dist.at<float>(y,x)) );
+
+
+            		inc_if_inside(h_space,x0,y0,HEIGHT, WIDTH, r);
+            		inc_if_inside(h_space,x0,y1,HEIGHT, WIDTH, r);
+            		inc_if_inside(h_space,x1,y0,HEIGHT, WIDTH, r);
+            		inc_if_inside(h_space,x1,y1,HEIGHT, WIDTH, r);
             	}
-            	 // //for (int t=0; t<180; t++)
-            	 // //faster version where:   <G(x,y) - 20  <   theta  <  <G(x,y) + 20
-              //    for(int t= (dist.at<float>(y,x) / 3.14159265f * 180 +170); t < dist.at<float>(y,x) / 3.14159265f * 180 + 190 ; t++)  
-              //    {  
-              //         double r = ( ((double)x - center_x) * cos((double)t * DEG2RAD)) + (((double)y - center_y) * sin((double)t * DEG2RAD));  
-              //         h_acc.at<float>((int)round(r+center_y*2),t)++;
-              //    }  
             }  
        }  
   }  
 
+
+	//sum up all r to make a 2d mat of hough space to draw.
+	for(int y=0;y<img_data.rows;y++)  
+	{  
+		int sum_r = 0;
+		for(int x=0;x<img_data.cols;x++)  
+		{  	
+			sum_r = 0;
+			for (int r=0; r<max_rad; r++)
+			{
+				sum_r += h_space[y][x][r];
+			}
+			
+			h_acc.at<float>(y,x) = sum_r > 100 ? 255 : 0;;
+			// printf("sum_r: %d \n", sum_r);
+			// printf("x %d, y %d, sum: %d \n",x,y, sum_r);
+		}
+	}
+
+
+
   return 0;  
 }  
-
 
 
 int main( int argc, char** argv )
@@ -106,15 +153,18 @@ int main( int argc, char** argv )
 	normalize(dy, dy_out, 0, 255, NORM_MINMAX, -1, Mat());
 	normalize(dist, dis_out, 0, 255, NORM_MINMAX, -1, Mat());
 
-	double h_space_h = sqrt(2.0) * (double) (mag.rows>mag.cols ? mag.rows : mag.cols); //-r -> +r
-	double h_space_w = 180;	
-	h_acc.create(h_space_h, h_space_w, CV_32FC1);
-	threshold(h_acc,h_out,0,255,THRESH_TOZERO);
-	threshold(h_out,h_acc,0,255,THRESH_TOZERO);
+	// double h_space_h = sqrt(2.0) * (double) (mag.rows>mag.cols ? mag.rows : mag.cols); //-r -> +r
+	// double h_space_w = 180;	
+
+	h_acc.create(mag.rows, mag.cols, CV_32FC1);
+	// threshold(h_acc,h_out,0,255,THRESH_TOZERO);
+	// threshold(h_out,h_acc,0,255,THRESH_TOZERO);
+
+
 	hough_transform(mag, h_acc, dist);
 
-	normalize(h_acc, h_out, 0, 255, NORM_MINMAX, -1, Mat());
-	//threshold(h_out,h_acc,30,255,THRESH_TOZERO);
+	// normalize(h_acc, h_out, 0, 255, NORM_MINMAX, -1, Mat());
+	// threshold(h_acc,h_out, 200,255,THRESH_TOZERO);
 
 	//save images
 	imwrite( "dx.jpg", dx_out );
@@ -122,7 +172,7 @@ int main( int argc, char** argv )
 	imwrite( "mag.jpg", mag );
 	imwrite( "dist.jpg", dis_out );
 	
-	imwrite( "h_space.jpg", h_out);
+	imwrite( "h_space.jpg", h_acc);
 	 return 0;
 }
 
