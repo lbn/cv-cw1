@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <opencv2/opencv.hpp>
-#include <core/core.hpp>
+#include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <math.h>
@@ -40,8 +40,33 @@ void sobel(Mat img, Mat &dx, Mat &dy, Mat &mag, Mat &dist)
 
 void inc_if_inside(double *** h_space, int x, int y, int height, int width, int r )
 {
-	if (x>=0 && x<width && y>= 0 && y<height)
+	if (x>0 && x<width && y> 0 && y<height)
 		h_space[y][x][r]++;
+}
+
+
+void local_maxima3(double ***h_space, int y, int x, int r, int height, int width, int depth, double *max) {
+    int search_r = 3; // 3x3x3 cube
+
+    for (int i = -search_r; i <= search_r; i++) {
+        if (y+i < 0 || y+i >= height) {
+            continue;
+        }
+        for (int j = -search_r; j <= search_r; j++) {
+            if (x+j < 0 || x+j >= width) {
+                continue;
+            }
+            for (int k = -search_r; k <= search_r; k++) {
+                if (r+k < 0 || r+k >= depth) {
+                    continue;
+                }
+                double current = h_space[y+i][x+j][r+k];
+                if (*max < current) {
+                    *max = current;
+                }
+            }
+        }
+    }
 }
 
 
@@ -90,13 +115,13 @@ int hough_transform(Mat img_data, Mat &h_acc, Mat dist)
 
             		int x0 = round(x + r * cos(dist.at<float>(y,x)) );
             		int x1 = round(x - r * cos(dist.at<float>(y,x)) );
-            		int y0 = round(y + r * cos(dist.at<float>(y,x)) );
-            		int y1 = round(y - r * cos(dist.at<float>(y,x)) );
+            		int y0 = round(y + r * sin(dist.at<float>(y,x)) );
+            		int y1 = round(y - r * sin(dist.at<float>(y,x)) );
 
 
-            		inc_if_inside(h_space,x0,y0,HEIGHT, WIDTH, r);
-            		inc_if_inside(h_space,x0,y1,HEIGHT, WIDTH, r);
-            		inc_if_inside(h_space,x1,y0,HEIGHT, WIDTH, r);
+                    inc_if_inside(h_space,x0,y0,HEIGHT, WIDTH, r);
+                    inc_if_inside(h_space,x0,y1,HEIGHT, WIDTH, r);
+                    inc_if_inside(h_space,x1,y0,HEIGHT, WIDTH, r);
             		inc_if_inside(h_space,x1,y1,HEIGHT, WIDTH, r);
             	}
             }  
@@ -122,6 +147,30 @@ int hough_transform(Mat img_data, Mat &h_acc, Mat dist)
 		}
 	}
 
+    for(int y=0;y<img_data.rows;y++)  
+    {  
+        int sum_r = 0;
+        for(int x=0;x<img_data.cols;x++)  
+        {  	
+            sum_r = 0;
+            for (int r=0; r<max_rad; r++)
+            {
+                double current = h_space[y][x][r];
+                double max = current;
+                local_maxima3(h_space,y,x,r,HEIGHT,WIDTH,DEPTH,&max);
+                //printf("current: %f, max: %f\n",current,max);
+                if (max > current) {
+                    // not local maxima
+                    continue;
+                }
+                sum_r = 101;//h_space[y][x][r];
+            }
+
+            h_acc.at<float>(y,x) = sum_r > 100 ? 255 : 0;;
+            // printf("sum_r: %d \n", sum_r);
+            // printf("x %d, y %d, sum: %d \n",x,y, sum_r);
+        }
+    }
 
 
   return 0;  
