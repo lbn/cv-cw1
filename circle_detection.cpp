@@ -46,7 +46,7 @@ void inc_if_inside(double *** h_space, int x, int y, int height, int width, int 
 
 
 void local_maxima3(double ***h_space, int y, int x, int r, int height, int width, int depth, double *max) {
-    int search_r = 3; // 3x3x3 cube
+    int search_r = 3; 
 
     for (int i = -search_r; i <= search_r; i++) {
         if (y+i < 0 || y+i >= height) {
